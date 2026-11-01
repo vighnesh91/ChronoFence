@@ -1,0 +1,577 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'wasm-unsafe-eval'; style-src 'unsafe-inline'; connect-src http://127.0.0.1:* ws://127.0.0.1:*; img-src 'none'; media-src blob: mediastream:; object-src 'none'; frame-src 'none'; worker-src blob:; base-uri 'none'; form-action 'none'">
+<title>ChronoFence — Local diagnostics</title>
+<style>
+:root{color-scheme:dark;--bg:#080e14;--panel:#101a24;--line:#293b49;--text:#e8f0f4;--muted:#a5b8c4;--cyan:#62e6d2;--amber:#ffd080;--red:#ff918d}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 80% 0,#132b3b,transparent 35%),var(--bg);color:var(--text);font:14px/1.5 ui-monospace,SFMono-Regular,Consolas,"Liberation Mono",monospace}main{max-width:1160px;margin:30px auto 48px;padding:0 16px}.panel,header{border:1px solid var(--line);border-radius:8px;background:var(--panel)}header{display:flex;justify-content:space-between;gap:20px;padding:24px}.eyebrow,.label{font-size:11px;letter-spacing:.1em;text-transform:uppercase}.eyebrow{color:var(--cyan);font-weight:bold}h1{font-size:clamp(28px,4vw,40px);letter-spacing:-.05em;margin:4px 0}p{margin:0}header p,.detail,.foot{color:var(--muted)}.tag,.badge{display:inline-block;border:1px solid currentColor;border-radius:4px;padding:4px 8px;font-size:11px;font-weight:bold}.good{color:var(--cyan)}.warn{color:var(--amber)}.bad{color:var(--red)}.neutral{color:var(--muted)}.controls{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:16px 0}button{font:inherit;font-weight:bold;background:var(--cyan);color:#081411;border:1px solid var(--cyan);border-radius:5px;padding:9px 13px;cursor:pointer}button.secondary{background:transparent;color:var(--text);border-color:var(--line)}button:disabled{opacity:.45;cursor:not-allowed}button:focus-visible{outline:2px solid #fff;outline-offset:3px}.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.panel{padding:18px;min-width:0}.wide{grid-column:span 2}.label{color:var(--muted)}.value{font-size:clamp(17px,2vw,23px);font-weight:bold;margin:9px 0 4px;overflow-wrap:anywhere}.detail{font-size:12px;overflow-wrap:anywhere}.head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}.head h2{margin:0;font-size:13px;letter-spacing:.06em;text-transform:uppercase}.body-text{margin:12px 0 6px;overflow-wrap:anywhere}.notice{border-left:3px solid var(--amber);background:#241f19;color:#f4dfb9;padding:12px 14px;margin:14px 0;font-size:12px}.console{margin-top:14px}.terminal{height:230px;overflow-y:auto;white-space:pre-wrap;overflow-wrap:anywhere;background:#060b10;border:1px solid var(--line);border-radius:5px;padding:12px;margin-top:12px;color:#a6c7c0;font-size:12px}.foot{font-size:11px;margin-top:14px}@media(max-width:800px){header{flex-direction:column}.grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:480px){main{padding:0 10px;margin-top:10px}.grid{grid-template-columns:1fr}.wide{grid-column:span 1}}
+</style>
+</head>
+<body>
+<main>
+<noscript><div class="notice">JavaScript is disabled or blocked. Open this HTML file in a browser with scripts enabled to run the diagnostics.</div></noscript>
+<header><div><div class="eyebrow">Local environmental diagnostics</div><h1>ChronoFence</h1><p>Browser timing, graphics and consent-based screen-share observations.</p></div><div><span class="tag good">LOCAL PROCESSING</span><div id="context" class="detail"></div></div></header>
+<div class="controls"><button id="run" type="button">Run diagnostics</button><button id="cancel" class="secondary" type="button" disabled>Cancel run</button><span class="detail">Keep this tab visible for frame measurements.</span></div>
+<div class="grid">
+<section class="panel"><div class="label">Clock step</div><div class="value" id="clock">Not measured</div><div class="detail" id="clockInfo">Minimum positive observed timer step.</div></section>
+<section class="panel"><div class="label">CPU sample mean</div><div class="value" id="cpuMean">Not measured</div><div class="detail" id="cpuInfo">Floating-point workload timing.</div></section>
+<section class="panel"><div class="label">CPU sample deviation</div><div class="value" id="cpuSD">Not measured</div><div class="detail" id="cpuRange">Population standard deviation and range.</div></section>
+<section class="panel"><div class="label">Frame interval deviation</div><div class="value" id="frameSD">Not measured</div><div class="detail" id="frameInfo">Frame mean, population standard deviation and range.</div></section>
+<section class="panel wide"><div class="head"><h2>WebGL renderer</h2><span id="gpuBadge" class="badge neutral">NOT TESTED</span></div><div class="body-text" id="gpu">Run diagnostics to query the renderer.</div><div class="detail" id="gpuInfo">Renderer details depend on browser policy.</div></section>
+<section class="panel wide"><div class="head"><h2>Heuristic assessment</h2><span id="verdict" class="badge neutral">NOT TESTED</span></div><div class="body-text" id="summary">Run diagnostics to evaluate available signals.</div><div class="detail">Heuristics are not proof of virtualization, surveillance, physical hardware, or security.</div></section>
+<section class="panel wide"><div class="head"><h2>Page activity monitor</h2><span id="monitorBadge" class="badge neutral">OFF</span></div><div class="body-text" id="monitorStatus">Off. Opt in to count clicks, page visibility changes, and focus changes.</div><div class="detail">Only this page is monitored. No text, keystrokes, or activity in other apps is collected.</div><div class="controls"><button id="monitorToggle" class="secondary" type="button">Start page monitor</button></div></section>
+<section class="panel wide"><div class="head"><h2>Screen-share check</h2><span id="shareBadge" class="badge neutral">NOT SHARING</span></div><div class="body-text" id="shareStatus">Only a share started by this page can be observed here.</div><div class="label">Observed Stream Parameters</div><div class="detail" id="shareMetrics">No active stream.</div><div class="detail" id="shareJitter">Presented-frame timing: not measured.</div><div class="detail">Dimensions: <span id="stream-dimensions">—</span> · Frame rate: <span id="stream-fps">—</span></div><div class="detail">Track label: <span id="stream-label">—</span></div><div class="detail">Settings are browser-reported, not measured delivery rates. Frame callbacks describe local browser presentation, not network or remote-desktop jitter. No image pixels or audio content are read, saved, or transmitted.</div><div class="controls"><button id="shareStart" class="secondary" type="button">Start screen-share check</button><button id="shareStop" class="secondary" type="button" disabled>Stop screen share</button></div></section>
+</div>
+<div class="grid" style="margin-top:12px">
+<section class="panel wide"><div class="head"><h2>Cryptographic benchmarks</h2><span id="cryptoBadge" class="badge neutral">NOT RUN</span></div><div class="body-text" id="cryptoStatus">Two local workers will run AES-GCM via Web Crypto and ChaCha20 blocks via embedded WebAssembly.</div><div class="detail" id="cryptoResult">Select Run crypto benchmarks. Synthetic data only; nothing is saved.</div><div class="detail" id="crypto-aes-result">AES-GCM: not measured.</div><div class="detail" id="crypto-wasm-result">ChaCha20: not measured.</div><div class="controls"><button id="cryptoStart" type="button" class="secondary">Run crypto benchmarks</button><button id="cryptoStop" type="button" class="secondary" disabled>Stop crypto</button></div></section>
+<section class="panel wide"><div class="head"><h2>Hardware &amp; graphics profile</h2><span class="badge neutral">BROWSER REPORTED</span></div><div class="body-text" id="hardwareInfo">Reading browser-reported hardware hints…</div><div class="detail" id="webgl-ext-count">WebGL extension count has not been queried.</div><div class="detail" id="extensionsInfo"></div><details><summary>Browser-exposed WebGL extension names</summary><div class="detail" id="extensionNames">Not available.</div></details><div class="controls"><button id="profileStart" type="button" class="secondary">Refresh hardware profile</button><button id="memoryStart" type="button" class="secondary">Run memory benchmark</button></div><div class="detail" id="memoryResult">Memory-only benchmark not run.</div></section>
+<section class="panel wide"><div class="head"><h2>Media device audit</h2><span id="devicesBadge" class="badge neutral">NOT RUN</span></div><div class="body-text" id="devicesInfo">Select Audit devices to list devices the browser exposes.</div><div class="detail">No capture permission is requested by this audit. Labels and devices may be hidden by browser permissions or policy. No recording.</div><div class="controls"><button id="devicesStart" type="button" class="secondary">Audit devices</button></div></section>
+<section class="panel wide"><div class="head"><h2>Optional loopback probes</h2><span id="networkBadge" class="badge neutral">NOT RUN</span></div><div class="body-text">Check HTTP and WebSocket connections to <strong>127.0.0.1</strong> on a port you specify. These are real local network requests.</div><div class="detail">The local service may log requests. Failures can reflect browser policy, protocol mismatch, or no listener; they do not prove interception. HTTP response contents are not read.</div><div class="controls"><label for="networkPort">Port</label><input id="networkPort" type="number" min="1" max="65535" inputmode="numeric" style="max-width:110px;padding:9px;background:#080e14;color:#e8f0f4;border:1px solid #526674;border-radius:4px" aria-describedby="networkResult"><button id="networkStart" type="button" class="secondary">Probe loopback</button></div><div class="detail" id="networkResult">No network probes sent.</div></section>
+</div>
+<div class="notice"><strong>Scope:</strong> Screen capture requires your explicit permission and starts a new share with this page. Its parameters cannot reveal whether another application is sharing or viewing the screen. This page cannot inspect background processes or verify an air gap.</div>
+<section class="panel console"><div class="head"><h2>System diagnostics feed</h2><span class="badge good">LOCAL / VOLATILE</span></div><div id="diagnostics-feed" class="terminal" role="log" aria-label="System diagnostics feed" aria-live="polite"></div></section>
+<p class="foot">No external resources, cookies, IndexedDB, or application storage. Only explicit loopback probes make network requests. Browser, driver, and OS caching or memory swapping are outside this page’s control.</p>
+</main>
+<script type="text/plain" id="workerSource">
+'use strict';
+const wasmBase64 = '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';
+const stamp = () => performance.now();
+function summary(samples, size) {
+  let mean = 0, m2 = 0, n = 0, min = Infinity, max = -Infinity;
+  for (const x of samples) { n++; const d = x - mean; mean += d / n; m2 += d * (x - mean); min = Math.min(min, x); max = Math.max(max, x); }
+  return { n, mean, sd: Math.sqrt(Math.max(0, m2 / n)), min, max, mbps: mean > 0 ? size / 1048576 / (mean / 1000) : null };
+}
+async function aes() {
+  if (!self.crypto || !crypto.subtle) throw new Error('Web Crypto AES-GCM unavailable in this worker context');
+  const key = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, false, ['encrypt']);
+  const data = new Uint8Array(10 * 1024 * 1024); data.fill(0xa5);
+  const samples = [];
+  for (let i = 0; i < 3; i++) {
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const start = stamp(); await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, data); samples.push(stamp() - start);
+  }
+  return summary(samples, data.length);
+}
+async function chacha() {
+  if (typeof WebAssembly !== 'object') throw new Error('WebAssembly is unavailable');
+  const bytes = Uint8Array.from(atob(wasmBase64), c => c.charCodeAt(0));
+  const memory = new WebAssembly.Memory({ initial: 1 });
+  const result = await WebAssembly.instantiate(bytes, { env: { memory } });
+  const block = result.instance.exports.block, state = new Uint32Array(memory.buffer, 0, 16), keyStream = new Uint8Array(memory.buffer, 0, 64);
+  const test = [0x61707865,0x3320646e,0x79622d32,0x6b206574,0x03020100,0x07060504,0x0b0a0908,0x0f0e0d0c,0x13121110,0x17161514,0x1b1a1918,0x1f1e1d1c,1,0x09000000,0x4a000000,0];
+  state.set(test); block(0);
+  const expected = '10f1e7e4d13b5915500fdd1fa32071c4c7d1f4c733c068030422aa9ac3d46c4ed2826446079faa0914c2d705d98b02a2b5129cd1de164eb9cbd083e8a2503c4e';
+  const got = Array.from(keyStream, n => n.toString(16).padStart(2, '0')).join('');
+  if (got !== expected) throw new Error('ChaCha20 RFC 8439 block self-test failed');
+  const input = new Uint8Array(65536), output = new Uint8Array(input.length), initial = new Uint32Array(test);
+  for (let i = 0; i < input.length; i++) input[i] = i & 255;
+  const samples = []; let counter = 1, digest = 0;
+  for (let pass = 0; pass < 12; pass++) {
+    const start = stamp();
+    for (let offset = 0; offset < input.length; offset += 64) {
+      initial[12] = counter++; state.set(initial); block(0);
+      for (let i = 0; i < 64; i++) output[offset + i] = input[offset + i] ^ keyStream[i];
+    }
+    samples.push(stamp() - start); digest ^= output[pass];
+  }
+  if (digest < 0) throw new Error('Unexpected digest');
+  return summary(samples, input.length);
+}
+onmessage = async () => {
+  const result = {};
+  try { result.aes = { data: await aes() }; } catch (e) { result.aes = { error: String(e && e.message || e) }; }
+  postMessage({ progress: result.aes.data ? 'AES-GCM: three 10 MiB encryptions complete; mean ' + result.aes.data.mean.toFixed(2) + ' ms.' : 'AES-GCM unavailable: ' + result.aes.error });
+  try { result.wasm = { data: await chacha() }; } catch (e) { result.wasm = { error: String(e && e.message || e) }; }
+  postMessage({ result });
+};
+
+</script>
+<script>
+'use strict';
+(() => {
+  const $ = id => document.getElementById(id);
+  let running = false, paused = false, runId = 0, waitCancel = null, sink = 0.314159;
+  let pauseWaiters = [], pauseCount = 0, pauseStarted = 0, pausedTime = 0;
+  let monitoring = false, clicks = 0, visibilityChanges = 0, focusChanges = 0;
+  let stream = null, shareVersion = 0, shareTimer = null, stopMediaTiming = null;
+  const ms = value => value.toFixed(3) + ' ms';
+  function logToTerminal(message) {
+    const d = new Date(), pad = (n, width) => String(n).padStart(width, '0');
+    const time = pad(d.getHours(), 2) + ':' + pad(d.getMinutes(), 2) + ':' + pad(d.getSeconds(), 2) + '.' + pad(d.getMilliseconds(), 3);
+    const line = document.createElement('div');
+    line.textContent = '[' + time + '] ' + message;
+    const box = $('diagnostics-feed'); box.appendChild(line);
+    while (box.children.length > 200) box.removeChild(box.firstChild);
+    box.scrollTop = box.scrollHeight;
+  }
+  function badge(id, text, type) { const e = $(id); e.textContent = text; e.className = 'badge ' + type; }
+  function assertRun(id) { if (!running || id !== runId) throw new Error('Run cancelled'); }
+  function wakePaused() {
+    const waiters = pauseWaiters; pauseWaiters = [];
+    for (const resolve of waiters) resolve();
+  }
+  async function waitUntilRunning(id) {
+    assertRun(id);
+    while (paused) { await new Promise(resolve => pauseWaiters.push(resolve)); assertRun(id); }
+  }
+  function statistics(values) {
+    if (!values.length) return null;
+    let n = 0, mean = 0, m2 = 0, min = Infinity, max = -Infinity;
+    for (const x of values) { n++; const d = x - mean; mean += d / n; m2 += d * (x - mean); min = Math.min(min, x); max = Math.max(max, x); }
+    return { n, mean, sd: Math.sqrt(Math.max(0, m2 / n)), min, max };
+  }
+  function nextFrame(timeout) {
+    return new Promise(resolve => {
+      let done = false, timer = null, frame = null;
+      function finish(value) {
+        if (done) return;
+        done = true;
+        if (timer !== null) clearTimeout(timer);
+        if (frame !== null && typeof cancelAnimationFrame === 'function') cancelAnimationFrame(frame);
+        document.removeEventListener('visibilitychange', onVisibility);
+        if (waitCancel === cancel) waitCancel = null;
+        resolve(value);
+      }
+      function cancel(reason) { finish({ reason: reason || 'Cancelled' }); }
+      function onVisibility() { if (document.hidden) finish({ reason: 'Page is hidden' }); }
+      if (document.hidden) { finish({ reason: 'Page is hidden' }); return; }
+      if (typeof requestAnimationFrame !== 'function') { finish({ reason: 'Animation frames unavailable' }); return; }
+      waitCancel = cancel;
+      document.addEventListener('visibilitychange', onVisibility);
+      timer = setTimeout(() => finish({ reason: 'Animation frame timed out' }), timeout);
+      try { frame = requestAnimationFrame(t => finish({ time: t })); }
+      catch (e) { finish({ reason: 'Animation frame failed: ' + (e.message || 'unknown error') }); }
+    });
+  }
+  const yieldTask = () => new Promise(resolve => setTimeout(resolve, 0));
+  function clockMeasurement() {
+    let previous = performance.now(), min = Infinity, changes = 0;
+    for (let i = 0; i < 60000; i++) { const t = performance.now(), delta = t - previous; if (delta > 0) { min = Math.min(min, delta); changes++; } previous = t; }
+    return changes ? { min, changes } : null;
+  }
+  function work(count) {
+    let x = sink;
+    for (let i = 0; i < count; i++) { x = x * 1.000000119 + 0.000001 + (i & 7) * 0.0000001; if (x > 100) x -= 99; }
+    sink = x;
+  }
+  function timeWork(count) { const start = performance.now(); work(count); return performance.now() - start; }
+  async function cpuMeasurement(id) {
+    let count = 8192;
+    for (let i = 0; i < 8; i++) {
+      await waitUntilRunning(id); const t = timeWork(count);
+      logToTerminal('CPU calibration: ' + count.toLocaleString() + ' iterations in ' + ms(t) + '.');
+      if (t >= 6 || count >= 1048576 || i === 7) break;
+      count = Math.min(count * 2, 1048576); await yieldTask();
+    }
+    await waitUntilRunning(id); timeWork(count); await yieldTask();
+    const samples = []; let fallback = false, hidden = document.hidden;
+    logToTerminal('Sampling ' + count.toLocaleString() + ' floating-point iterations per sample.');
+    for (let i = 0; i < 30; i++) {
+      await waitUntilRunning(id);
+      if (!fallback) {
+        const frame = await nextFrame(1000); assertRun(id);
+        if (frame.reason === 'Paused') { await waitUntilRunning(id); i--; continue; }
+        if (frame.reason) { fallback = true; logToTerminal('CPU scheduling fallback: ' + frame.reason + '.'); }
+      } else await yieldTask();
+      await waitUntilRunning(id); hidden = hidden || document.hidden; samples.push(timeWork(count));
+      if ((i + 1) % 10 === 0) logToTerminal('CPU samples: ' + (i + 1) + '/30.');
+    }
+    return { count, result: statistics(samples), hidden, fallback };
+  }
+  async function frameMeasurement(id) {
+    const samples = []; let previous = null, reason = '', seenPause = pauseCount;
+    const start = performance.now(), pausedAtStart = pausedTime;
+    while (samples.length < 45) {
+      await waitUntilRunning(id);
+      if (seenPause !== pauseCount) { previous = null; seenPause = pauseCount; }
+      if (performance.now() - start - (pausedTime - pausedAtStart) > 5000) { reason = 'Five-second frame sampling limit reached'; break; }
+      const f = await nextFrame(1200); assertRun(id);
+      if (f.reason === 'Paused') { await waitUntilRunning(id); previous = null; seenPause = pauseCount; continue; }
+      if (f.reason) { reason = f.reason; break; }
+      if (previous !== null && f.time > previous) samples.push(f.time - previous);
+      previous = f.time;
+      if (samples.length > 0 && samples.length % 15 === 0) logToTerminal('Frame intervals: ' + samples.length + '/45.');
+    }
+    return { result: statistics(samples), reason };
+  }
+  function graphics() {
+    let gl = null;
+    try {
+      const canvas = document.createElement('canvas'); gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+      if (!gl) return { reason: 'WebGL unavailable or blocked.' };
+      const ext = gl.getExtension('WEBGL_debug_renderer_info');
+      if (!ext) return { reason: 'Unmasked renderer information unavailable or restricted.' };
+      const rv = gl.getParameter(ext.UNMASKED_RENDERER_WEBGL), vv = gl.getParameter(ext.UNMASKED_VENDOR_WEBGL);
+      if (!rv) return { reason: 'The browser did not expose an unmasked renderer.' };
+      const renderer = String(rv), vendor = String(vv || 'Unavailable');
+      const marker = /llvmpipe|swiftshader|softpipe|software rasterizer|virtualbox|vmware|headless/i.exec(renderer + ' ' + vendor);
+      return { renderer, vendor, marker: marker ? marker[0] : '' };
+    } catch (e) { return { reason: 'WebGL query failed: ' + (e.message || 'unknown error') }; }
+    finally { if (gl) { try { const ext = gl.getExtension('WEBGL_lose_context'); if (ext) ext.loseContext(); } catch (_) {} } }
+  }
+  function resetResults() {
+    for (const id of ['clock','cpuMean','cpuSD','frameSD']) $(id).textContent = 'Not measured';
+    $('clockInfo').textContent = 'Clock measurement not yet complete.'; $('cpuInfo').textContent = 'CPU measurement not yet complete.';
+    $('cpuRange').textContent = 'CPU measurement not yet complete.'; $('frameInfo').textContent = 'Frame measurement not yet complete.';
+    $('gpu').textContent = 'Renderer not yet queried.'; $('gpuInfo').textContent = 'Renderer details depend on browser policy.';
+    badge('gpuBadge', 'NOT TESTED', 'neutral'); badge('verdict', 'RUNNING', 'neutral'); $('summary').textContent = 'Diagnostics are running.';
+  }
+  function assess(clock, cpu, gpu, frames) {
+    const triggers = [], missing = [];
+    if (gpu.marker) triggers.push('renderer marker: ' + gpu.marker);
+    if (navigator.webdriver === true) triggers.push('browser reports automation');
+    if (clock && clock.min > 1) triggers.push('observed timer step greater than 1 ms');
+    if (cpu.result.mean > 0 && cpu.result.sd / cpu.result.mean >= 0.35) triggers.push('CPU timing variation at least 35%');
+    if (!clock) missing.push('timer'); if (!gpu.renderer) missing.push('renderer');
+    if (cpu.hidden || cpu.fallback) missing.push('visible animation-frame CPU scheduling');
+    if (!frames.result || frames.result.n < 10 || frames.reason) missing.push('complete frame timing');
+    if (triggers.length) { badge('verdict', 'SIGNALS OBSERVED', 'warn'); $('summary').textContent = 'Triggers: ' + triggers.join('; ') + '.'; }
+    else if (missing.length) { badge('verdict', 'INCONCLUSIVE', 'neutral'); $('summary').textContent = 'No listed trigger; one or more observations were unavailable or interrupted.'; }
+    else { badge('verdict', 'NO LISTED SIGNALS', 'good'); $('summary').textContent = 'No configured heuristic triggered.'; }
+    if (missing.length) $('summary').textContent += ' Limited observations: ' + missing.join(', ') + '.';
+    logToTerminal('Assessment: ' + $('verdict').textContent + '. ' + $('summary').textContent);
+  }
+  async function run() {
+    if (running) return;
+    if (!window.performance || typeof performance.now !== 'function') { badge('verdict', 'UNAVAILABLE', 'warn'); $('summary').textContent = 'performance.now() is unavailable.'; logToTerminal('Cannot run: performance.now() is unavailable.'); return; }
+    running = true; paused = false; pausedTime = 0; pauseCount = 0;
+    const id = ++runId; $('run').textContent = 'Pause diagnostics'; $('cancel').disabled = false; resetResults();
+    logToTerminal('Diagnostics initiated. Calibrating the high-resolution timer.');
+    try {
+      const clock = clockMeasurement();
+      $('clock').textContent = clock ? ms(clock.min) : 'Unavailable';
+      $('clockInfo').textContent = clock ? 'Minimum positive step over 60,000 reads; ' + clock.changes + ' changes.' : 'No positive clock steps observed.';
+      logToTerminal(clock ? 'Clock minimum observed step: ' + ms(clock.min) + '.' : 'Clock step unavailable.');
+      await yieldTask(); await waitUntilRunning(id);
+      logToTerminal('Inspecting unmasked WebGL vendor and renderer.');
+      const gpu = graphics();
+      $('gpu').textContent = gpu.renderer ? 'Renderer: ' + gpu.renderer : gpu.reason;
+      $('gpuInfo').textContent = gpu.renderer ? 'Vendor: ' + gpu.vendor + '.' : 'Graphics-based assessment is limited.';
+      badge('gpuBadge', gpu.marker ? 'MARKER FOUND' : gpu.renderer ? 'NO LISTED MATCH' : 'UNAVAILABLE', gpu.marker ? 'warn' : 'neutral');
+      logToTerminal(gpu.marker ? 'Graphics marker observed: ' + gpu.marker + '.' : gpu.renderer ? 'No listed graphics marker found.' : gpu.reason);
+      if (gpu.marker) { badge('verdict', 'SIGNALS OBSERVED', 'warn'); $('summary').textContent = 'Renderer marker: ' + gpu.marker + '. Remaining measurements continue.'; }
+      await yieldTask(); await waitUntilRunning(id);
+      const cpu = await cpuMeasurement(id), c = cpu.result;
+      await waitUntilRunning(id);
+      $('cpuMean').textContent = ms(c.mean); $('cpuInfo').textContent = c.n + ' samples × ' + cpu.count.toLocaleString() + ' iterations.' + (cpu.hidden || cpu.fallback ? ' Scheduling was interrupted or used fallback.' : '');
+      $('cpuSD').textContent = ms(c.sd); $('cpuRange').textContent = 'Population SD; range ' + ms(c.min) + '–' + ms(c.max) + '.';
+      logToTerminal('CPU mean ' + ms(c.mean) + ', population SD ' + ms(c.sd) + ', range ' + ms(c.min) + '–' + ms(c.max) + '.');
+      logToTerminal('Measuring animation-frame intervals.');
+      const frames = await frameMeasurement(id); assertRun(id); const f = frames.result;
+      if (f && f.n >= 10) { $('frameSD').textContent = ms(f.sd); $('frameInfo').textContent = f.n + ' intervals; mean ' + ms(f.mean) + '; range ' + ms(f.min) + '–' + ms(f.max) + (frames.reason ? '; partial: ' + frames.reason + '.' : '.'); logToTerminal('Frame mean ' + ms(f.mean) + ', population SD ' + ms(f.sd) + ', range ' + ms(f.min) + '–' + ms(f.max) + '.'); }
+      else { $('frameSD').textContent = 'Unavailable'; $('frameInfo').textContent = (f ? f.n : 0) + ' intervals; at least 10 required. ' + (frames.reason || 'Insufficient callbacks.'); logToTerminal('Frame timing unavailable: ' + (frames.reason || 'insufficient callbacks') + '.'); }
+      assess(clock, cpu, gpu, frames); logToTerminal('Diagnostics finished.');
+    } catch (e) {
+      if (id === runId) { const reason = e && e.message ? e.message : 'Unknown error'; badge('verdict', 'INCOMPLETE', 'warn'); $('summary').textContent = 'Diagnostics stopped: ' + reason; for (const key of ['clock','cpuMean','cpuSD','frameSD']) if ($(key).textContent === 'Not measured') $(key).textContent = 'Unavailable'; logToTerminal('Diagnostics stopped: ' + reason + '.'); }
+    } finally { if (id === runId) { running = false; paused = false; $('run').textContent = 'Run diagnostics'; $('cancel').disabled = true; } }
+  }
+  let beforePause = null;
+  $('run').addEventListener('click', () => {
+    if (!running) { run(); return; }
+    if (!paused) {
+      paused = true; pauseCount++; pauseStarted = performance.now();
+      beforePause = { text: $('verdict').textContent, className: $('verdict').className, summary: $('summary').textContent };
+      $('run').textContent = 'Resume diagnostics';
+      badge('verdict', 'PAUSED', 'neutral'); $('summary').textContent = 'Diagnostics paused. Resume to continue collecting samples.';
+      if (waitCancel) waitCancel('Paused');
+      logToTerminal('Diagnostics paused by user.');
+    } else {
+      pausedTime += performance.now() - pauseStarted; paused = false;
+      $('run').textContent = 'Pause diagnostics';
+      if (beforePause) { $('verdict').textContent = beforePause.text; $('verdict').className = beforePause.className; $('summary').textContent = beforePause.summary; }
+      beforePause = null; wakePaused(); logToTerminal('Diagnostics resumed by user.');
+    }
+  });
+  $('cancel').addEventListener('click', () => {
+    if (!running) return;
+    running = false; paused = false; runId++;
+    if (waitCancel) waitCancel('Cancelled');
+    wakePaused(); beforePause = null;
+    $('run').textContent = 'Run diagnostics'; $('cancel').disabled = true;
+    badge('verdict', 'CANCELLED', 'neutral'); $('summary').textContent = 'Run cancelled; displayed measurements may be partial.';
+    for (const [value, detail] of [['clock','clockInfo'],['cpuMean','cpuInfo'],['cpuSD','cpuRange'],['frameSD','frameInfo']]) {
+      if ($(value).textContent === 'Not measured') $(detail).textContent = 'Not measured: run cancelled.';
+    }
+    logToTerminal('Diagnostics cancelled by user.');
+  });
+  function updateMonitor() {
+    badge('monitorBadge', monitoring ? 'ON' : 'OFF', monitoring ? 'good' : 'neutral');
+    $('monitorToggle').textContent = monitoring ? 'Stop page monitor' : 'Start page monitor';
+    $('monitorStatus').textContent = monitoring ? clicks + ' page clicks; ' + visibilityChanges + ' visibility changes; ' + focusChanges + ' focus changes. Page is ' + (document.hidden ? 'hidden.' : 'visible.') : 'Off. Opt in to count clicks, page visibility changes, and focus changes.';
+  }
+  $('monitorToggle').addEventListener('click', () => { monitoring = !monitoring; if (monitoring) { clicks = 0; visibilityChanges = 0; focusChanges = 0; } updateMonitor(); logToTerminal('Page activity monitor ' + (monitoring ? 'started' : 'stopped') + ' by user.'); });
+  document.addEventListener('click', () => { if (monitoring) { clicks++; updateMonitor(); } });
+  document.addEventListener('visibilitychange', () => { if (monitoring) { visibilityChanges++; updateMonitor(); logToTerminal('Page visibility: ' + (document.hidden ? 'hidden.' : 'visible.')); } });
+  window.addEventListener('focus', () => { if (monitoring) { focusChanges++; updateMonitor(); logToTerminal('Page gained focus.'); } });
+  window.addEventListener('blur', () => { if (monitoring) { focusChanges++; updateMonitor(); logToTerminal('Page lost focus.'); } });
+  function readTrack(track) {
+    const s = typeof track.getSettings === 'function' ? track.getSettings() : {};
+    const width = Number.isFinite(s.width) ? String(s.width) : 'unavailable';
+    const height = Number.isFinite(s.height) ? String(s.height) : 'unavailable';
+    const rate = Number.isFinite(s.frameRate) ? s.frameRate.toFixed(2) + ' fps' : 'unavailable';
+    const surface = s.displaySurface || 'not reported';
+    const label = track.label || 'Not provided by the browser';
+    return { width, height, rate, surface, label };
+  }
+  function updateTrack(track) {
+    try {
+      const s = readTrack(track);
+      $('shareMetrics').textContent = 'Surface: ' + s.surface + '.';
+      $('stream-dimensions').textContent = s.width + ' × ' + s.height + ' px';
+      $('stream-fps').textContent = s.rate;
+      $('stream-label').textContent = s.label;
+      return s;
+    } catch (e) {
+      $('shareMetrics').textContent = 'Track settings unavailable: ' + (e && e.message ? e.message : 'browser error');
+      $('stream-dimensions').textContent = 'unavailable'; $('stream-fps').textContent = 'unavailable';
+      $('stream-label').textContent = track.label || 'unavailable';
+      return null;
+    }
+  }
+  function beginMediaTiming(captured) {
+    const video = document.createElement('video'); video.muted = true; video.playsInline = true; video.srcObject = captured;
+    let stopped = false, handle = null, watchdog = null, previous = null;
+    const intervals = [];
+    function cleanup() {
+      if (stopped) return; stopped = true;
+      if (watchdog !== null) clearTimeout(watchdog);
+      if (handle !== null && typeof video.cancelVideoFrameCallback === 'function') video.cancelVideoFrameCallback(handle);
+      document.removeEventListener('visibilitychange', visibility);
+      video.pause(); video.srcObject = null;
+    }
+    function visibility() { previous = null; intervals.length = 0; if (!stopped) $('shareJitter').textContent = document.hidden ? 'Presented-frame timing paused while page is hidden.' : 'Waiting for presented-frame callbacks.'; }
+    function armWatchdog() {
+      if (watchdog !== null) clearTimeout(watchdog);
+      watchdog = setTimeout(() => { if (!stopped) $('shareJitter').textContent = 'No recent frame callbacks; static content or browser scheduling may be responsible.'; }, 3000);
+    }
+    function next(time) {
+      if (stopped || stream !== captured) return;
+      handle = null;
+      if (!document.hidden && previous !== null && time > previous) {
+        intervals.push(time - previous); if (intervals.length > 60) intervals.shift();
+        if (intervals.length >= 2) { const s = statistics(intervals); $('shareJitter').textContent = 'Presented-frame intervals (' + s.n + '): mean ' + ms(s.mean) + ', population SD ' + ms(s.sd) + ', range ' + ms(s.min) + '–' + ms(s.max) + '.'; }
+      }
+      previous = document.hidden ? null : time; armWatchdog();
+      try { handle = video.requestVideoFrameCallback(next); }
+      catch (_) { $('shareJitter').textContent = 'Presented-frame timing unavailable.'; }
+    }
+    stopMediaTiming = cleanup;
+    if (typeof video.requestVideoFrameCallback !== 'function') { $('shareJitter').textContent = 'Presented-frame timing unavailable in this browser.'; return; }
+    document.addEventListener('visibilitychange', visibility);
+    $('shareJitter').textContent = 'Waiting for presented-frame callbacks; static content may produce few callbacks.';
+    try {
+      const playing = video.play();
+      if (playing && typeof playing.catch === 'function') playing.catch(() => { if (!stopped) $('shareJitter').textContent = 'Browser could not start playback for frame timing.'; });
+      armWatchdog(); handle = video.requestVideoFrameCallback(next);
+    } catch (e) { $('shareJitter').textContent = 'Presented-frame timing unavailable: ' + (e && e.message ? e.message : 'browser error'); }
+  }
+  function stopShare(message) {
+    shareVersion++; if (shareTimer !== null) { clearInterval(shareTimer); shareTimer = null; }
+    const old = stream; stream = null;
+    if (stopMediaTiming) { stopMediaTiming(); stopMediaTiming = null; }
+    $('shareJitter').textContent = 'Presented-frame timing: not measured.';
+    if (old) for (const track of old.getTracks()) track.stop();
+    $('shareStart').disabled = false; $('shareStop').disabled = true; badge('shareBadge', 'NOT SHARING', 'neutral');
+    $('shareStatus').textContent = message || 'This page’s screen share stopped. Other applications’ status is unknown.';
+    $('shareMetrics').textContent = 'No active stream.';
+    for (const id of ['stream-dimensions', 'stream-fps', 'stream-label']) $(id).textContent = '—';
+    if (old) logToTerminal('Screen capture stopped.');
+  }
+  $('shareStart').addEventListener('click', async () => {
+    if (stream || $('shareStart').disabled) return;
+    logToTerminal('Screen capture requested; waiting for browser consent.');
+    if (!navigator.mediaDevices || typeof navigator.mediaDevices.getDisplayMedia !== 'function') { badge('shareBadge', 'UNAVAILABLE', 'warn'); $('shareStatus').textContent = 'Screen capture is unavailable in this browser or context.'; logToTerminal('Screen Capture API unavailable.'); return; }
+    const version = ++shareVersion; $('shareStart').disabled = true; $('shareStatus').textContent = 'Waiting for the browser’s selection dialog.';
+    try {
+      const captured = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+      if (version !== shareVersion) { for (const t of captured.getTracks()) t.stop(); return; }
+      const track = captured.getVideoTracks()[0];
+      if (!track || track.readyState === 'ended') { for (const t of captured.getTracks()) t.stop(); throw new Error('No active video track was returned.'); }
+      stream = captured;
+      track.addEventListener('ended', () => { if (stream === captured) stopShare('The browser or user stopped this page’s screen share.'); }, { once: true });
+      badge('shareBadge', 'THIS PAGE IS SHARING', 'warn'); $('shareStop').disabled = false;
+      $('shareStatus').textContent = 'This page’s consented screen share is active. Other applications’ status is unknown.';
+      const s = updateTrack(track);
+      try { beginMediaTiming(captured); } catch (e) { $('shareJitter').textContent = 'Presented-frame timing unavailable: ' + (e && e.message ? e.message : 'browser error'); }
+      logToTerminal(s ? 'Screen capture initiated: ' + s.label + ' (' + s.surface + ') [' + s.width + ' × ' + s.height + ' @ ' + s.rate + ' reported].' : 'Screen capture initiated; track settings unavailable.');
+      shareTimer = setInterval(() => { if (stream === captured && track.readyState !== 'ended') updateTrack(track); }, 2000);
+    } catch (e) {
+      if (version !== shareVersion) return;
+      $('shareStart').disabled = false; badge('shareBadge', 'NOT SHARING', 'neutral');
+      $('shareStatus').textContent = 'Screen capture did not start: ' + (e && e.message ? e.message : 'permission denied or unavailable');
+      logToTerminal('Screen capture did not start: ' + (e && e.name ? e.name : 'unknown error') + '.');
+    }
+  });
+  $('shareStop').addEventListener('click', () => stopShare());
+  window.addEventListener('pagehide', () => { if (stream || $('shareStart').disabled) stopShare('This page’s screen share stopped when the page was closed or navigated away.'); });
+  function refreshHardware() {
+    const cores = typeof navigator.hardwareConcurrency === 'number' ? String(navigator.hardwareConcurrency) : 'not reported';
+    const memory = typeof navigator.deviceMemory === 'number' ? navigator.deviceMemory + ' GiB (approximate)' : 'not reported';
+    $('hardwareInfo').textContent = 'Logical processors: ' + cores + '; device memory: ' + memory + '.';
+    let gl = null;
+    try {
+      const canvas = document.createElement('canvas'); gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+      if (!gl) { $('webgl-ext-count').textContent = 'WebGL extensions unavailable.'; $('extensionsInfo').textContent = ''; $('extensionNames').textContent = 'Unavailable.'; }
+      else {
+        const extensions = gl.getSupportedExtensions() || [];
+        const relevant = ['WEBGL_debug_renderer_info','EXT_disjoint_timer_query','WEBGL_debug_shaders'].map(x => x + ': ' + (extensions.includes(x) ? 'available' : 'not exposed'));
+        $('webgl-ext-count').textContent = extensions.length + ' browser-exposed WebGL extensions.';
+        $('extensionsInfo').textContent = relevant.join('; ') + '.';
+        $('extensionNames').textContent = extensions.length ? extensions.slice().sort().join(', ') : 'No extensions exposed.';
+        logToTerminal('WebGL audit: ' + extensions.length + ' browser-exposed extensions.');
+      }
+    } catch (e) { $('webgl-ext-count').textContent = 'WebGL extension query failed: ' + (e && e.message ? e.message : 'unknown error'); $('extensionsInfo').textContent = ''; $('extensionNames').textContent = 'Unavailable.'; }
+    finally { if (gl) { try { const ext = gl.getExtension('WEBGL_lose_context'); if (ext) ext.loseContext(); } catch (_) {} } }
+    logToTerminal('Hardware profile refreshed. Browser hints may be rounded, restricted, or unavailable.');
+  }
+  $('profileStart').addEventListener('click', refreshHardware);
+  let memoryRunning = false;
+  $('memoryStart').addEventListener('click', async () => {
+    if (memoryRunning) return;
+    memoryRunning = true; $('memoryStart').disabled = true;
+    $('memoryResult').textContent = 'Measuring volatile typed-array access…';
+    logToTerminal('Memory-only benchmark started; no database or disk storage is used.');
+    try {
+      const data = new Uint32Array(524288), samples = []; let checksum = 0;
+      for (let pass = 0; pass < 6; pass++) {
+        await yieldTask(); const start = performance.now();
+        for (let i = 0; i < data.length; i++) data[i] = (i ^ pass) >>> 0;
+        for (let i = 0; i < data.length; i++) checksum = (checksum + data[i]) >>> 0;
+        samples.push(performance.now() - start);
+      }
+      const s = statistics(samples);
+      $('memoryResult').textContent = '2 MiB typed array, six write/read passes: mean ' + ms(s.mean) + '; population SD ' + ms(s.sd) + '; range ' + ms(s.min) + '–' + ms(s.max) + '. Checksum: ' + checksum + '.';
+      logToTerminal('Memory benchmark completed: mean ' + ms(s.mean) + '; population SD ' + ms(s.sd) + '.');
+    } catch (e) { $('memoryResult').textContent = 'Memory benchmark unavailable: ' + (e && e.message ? e.message : 'unknown error'); logToTerminal('Memory benchmark failed.'); }
+    finally { memoryRunning = false; $('memoryStart').disabled = false; }
+  });
+  $('devicesStart').addEventListener('click', async () => {
+    const button = $('devicesStart'); if (button.disabled) return;
+    logToTerminal('Media device audit requested. No capture permission requested.');
+    if (!navigator.mediaDevices || typeof navigator.mediaDevices.enumerateDevices !== 'function') { badge('devicesBadge', 'UNAVAILABLE', 'warn'); $('devicesInfo').textContent = 'Media device enumeration is unavailable in this browser or context.'; return; }
+    button.disabled = true;
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const counts = { audioinput: 0, videoinput: 0, audiooutput: 0 };
+      for (const device of devices) if (Object.prototype.hasOwnProperty.call(counts, device.kind)) counts[device.kind]++;
+      const labels = devices.map(d => d.kind + ': ' + (d.label || '(label hidden)'));
+      $('devicesInfo').textContent = 'Browser-exposed devices: ' + counts.audioinput + ' microphones, ' + counts.videoinput + ' cameras, ' + counts.audiooutput + ' audio outputs.' + (labels.length ? ' ' + labels.join(' | ') : ' No devices exposed.');
+      badge('devicesBadge', 'COMPLETE', 'good'); logToTerminal('Device audit complete: ' + devices.length + ' browser-exposed entries; labels may be restricted.');
+    } catch (e) { badge('devicesBadge', 'UNAVAILABLE', 'warn'); $('devicesInfo').textContent = 'Device audit failed: ' + (e && e.message ? e.message : 'unknown error'); logToTerminal('Device audit failed.'); }
+    finally { button.disabled = false; }
+  });
+  let cryptoGeneration = 0, cryptoJobs = [];
+  function cancelCryptoJobs() { for (const cancel of cryptoJobs.splice(0)) cancel(); }
+  function cryptoWorker(source, number) {
+    return new Promise((resolve, reject) => {
+      let worker, timer, finished = false, url;
+      const cancel = () => finish(new Error('Cancelled'));
+      function finish(error, result) {
+        if (finished) return; finished = true;
+        if (timer) clearTimeout(timer);
+        if (worker) worker.terminate();
+        if (url) URL.revokeObjectURL(url);
+        const index = cryptoJobs.indexOf(cancel); if (index !== -1) cryptoJobs.splice(index, 1);
+        if (error) reject(error); else resolve(result);
+      }
+      try {
+        url = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }));
+        worker = new Worker(url);
+        cryptoJobs.push(cancel);
+        worker.onmessage = event => {
+          const m = event.data || {};
+          if (m.progress) logToTerminal('Crypto worker ' + number + ': ' + m.progress);
+          if (m.result) finish(null, m.result);
+        };
+        worker.onerror = event => { if (event.preventDefault) event.preventDefault(); finish(new Error(event.message || 'Worker failed')); };
+        worker.onmessageerror = () => finish(new Error('Invalid worker message'));
+        timer = setTimeout(() => finish(new Error('Worker exceeded 30 seconds')), 30000);
+        worker.postMessage({ start: true });
+      } catch (e) { finish(e); }
+    });
+  }
+  function cryptoFormat(name, results, field) {
+    const good = results.map(x => x[field]).filter(x => x && x.data).map(x => x.data);
+    const errors = results.map(x => x[field]).filter(x => x && x.error).map(x => x.error);
+    if (!good.length) return name + ': unavailable' + (errors.length ? ' (' + errors[0] + ')' : '') + '.';
+    const mean = good.reduce((sum, x) => sum + x.mean, 0) / good.length;
+    const rate = good.every(x => x.mbps !== null) ? (good.reduce((sum, x) => sum + x.mbps, 0) / good.length).toFixed(2) + ' MiB/s per worker (mean)' : 'rate unavailable';
+    const details = good.map((x, i) => 'worker ' + (i + 1) + ': mean ' + ms(x.mean) + ', SD ' + ms(x.sd) + ', range ' + ms(x.min) + '–' + ms(x.max)).join('; ');
+    return name + ': ' + good.length + ' successful workers, ' + rate + '; ' + details + (errors.length ? '; ' + errors.length + ' worker(s) failed' : '') + '.';
+  }
+  $('cryptoStart').addEventListener('click', async () => {
+    if ($('cryptoStart').disabled) return;
+    if (typeof Worker !== 'function' || typeof Blob !== 'function' || !window.URL || typeof URL.createObjectURL !== 'function') { badge('cryptoBadge', 'UNAVAILABLE', 'warn'); $('cryptoResult').textContent = 'Local blob workers are not available in this browser or context.'; logToTerminal('Cryptographic benchmark unavailable: workers unavailable.'); return; }
+    const id = ++cryptoGeneration;
+    $('cryptoStart').disabled = true; $('cryptoStop').disabled = false; badge('cryptoBadge', 'RUNNING', 'neutral');
+    $('cryptoStatus').textContent = 'Running two local workers on synthetic data.';
+    $('cryptoResult').textContent = 'Measuring AES-GCM and WebAssembly ChaCha20…';
+    $('crypto-aes-result').textContent = 'AES-GCM: measuring 10 MiB samples.'; $('crypto-wasm-result').textContent = 'ChaCha20: measuring 64 KiB samples.';
+    logToTerminal('Cryptographic benchmark started with two local workers.');
+    try {
+      const source = $('workerSource').textContent;
+      const settled = await Promise.allSettled([cryptoWorker(source, 1), cryptoWorker(source, 2)]);
+      if (id !== cryptoGeneration) return;
+      const results = settled.filter(x => x.status === 'fulfilled').map(x => x.value);
+      if (!results.length) throw new Error(settled[0].reason && settled[0].reason.message || 'Both workers failed');
+      $('cryptoResult').textContent = 'Completed results:';
+      $('crypto-aes-result').textContent = cryptoFormat('AES-GCM, 10 MiB (Web Crypto)', results, 'aes');
+      $('crypto-wasm-result').textContent = cryptoFormat('ChaCha20, 64 KiB (WASM block + JavaScript XOR)', results, 'wasm');
+      const allOK = results.length === 2 && results.every(x => x.aes.data && x.wasm.data);
+      badge('cryptoBadge', allOK ? 'COMPLETE' : 'PARTIAL', allOK ? 'good' : 'warn');
+      $('cryptoStatus').textContent = 'Each worker measured three 10 MiB AES-GCM operations and twelve 64 KiB ChaCha20 operations. WASM includes an RFC 8439 block self-test; throughput includes JavaScript buffer handling.';
+      logToTerminal('Cryptographic benchmark finished: ' + $('cryptoBadge').textContent + '.');
+    } catch (e) { if (id === cryptoGeneration) { badge('cryptoBadge', 'UNAVAILABLE', 'warn'); $('cryptoResult').textContent = 'Benchmark failed: ' + (e && e.message ? e.message : 'unknown error'); $('crypto-aes-result').textContent = 'AES-GCM: unavailable.'; $('crypto-wasm-result').textContent = 'ChaCha20: unavailable.'; logToTerminal('Cryptographic benchmark failed: ' + (e && e.message ? e.message : 'unknown error') + '.'); } }
+    finally { if (id === cryptoGeneration) { cancelCryptoJobs(); $('cryptoStart').disabled = false; $('cryptoStop').disabled = true; } }
+  });
+  $('cryptoStop').addEventListener('click', () => { cryptoGeneration++; cancelCryptoJobs(); $('cryptoStart').disabled = false; $('cryptoStop').disabled = true; badge('cryptoBadge', 'CANCELLED', 'neutral'); $('cryptoStatus').textContent = 'Cryptographic benchmark cancelled.'; $('cryptoResult').textContent = 'No completed result.'; $('crypto-aes-result').textContent = 'AES-GCM: cancelled.'; $('crypto-wasm-result').textContent = 'ChaCha20: cancelled.'; logToTerminal('Cryptographic benchmark cancelled.'); });
+  const networkControllers = new Set(), networkSockets = new Set();
+  async function probeHttp(port) {
+    const controller = new AbortController(); networkControllers.add(controller);
+    const start = performance.now(); let timeout = false;
+    const timer = setTimeout(() => { timeout = true; controller.abort(); }, 2000);
+    try {
+      const response = await fetch('http://127.0.0.1:' + port + '/', { mode: 'no-cors', credentials: 'omit', cache: 'no-store', redirect: 'error', signal: controller.signal });
+      return 'HTTP request completed in ' + ms(performance.now() - start) + ' (response ' + response.type + '; status/body not inspected)';
+    } catch (e) { return timeout ? 'HTTP timed out' : 'HTTP failed or was blocked (' + (e && e.name ? e.name : 'error') + ')'; }
+    finally { clearTimeout(timer); networkControllers.delete(controller); }
+  }
+  function probeWebSocket(port) {
+    return new Promise(resolve => {
+      let socket = null, done = false, timer = null; const start = performance.now();
+      function finish(message) { if (done) return; done = true; if (timer) clearTimeout(timer); if (socket) { networkSockets.delete(socket); try { socket.close(); } catch (_) {} } resolve(message); }
+      try {
+        socket = new WebSocket('ws://127.0.0.1:' + port + '/'); networkSockets.add(socket);
+        socket.onopen = () => finish('WebSocket handshake completed in ' + ms(performance.now() - start));
+        socket.onerror = () => finish('WebSocket handshake failed or was blocked');
+        socket.onclose = () => finish('WebSocket closed before a handshake completed');
+        timer = setTimeout(() => finish('WebSocket timed out'), 2000);
+      } catch (e) { finish('WebSocket unavailable or blocked (' + (e && e.name ? e.name : 'error') + ')'); }
+    });
+  }
+  $('networkStart').addEventListener('click', async () => {
+    const raw = $('networkPort').value.trim(), port = Number(raw);
+    if (!/^\d+$/.test(raw) || !Number.isInteger(port) || port < 1 || port > 65535) { $('networkResult').textContent = 'Enter a port number from 1 to 65535.'; return; }
+    $('networkStart').disabled = true; badge('networkBadge', 'RUNNING', 'neutral');
+    $('networkResult').textContent = 'Sending opt-in requests to 127.0.0.1:' + port + '…';
+    logToTerminal('Loopback HTTP and WebSocket probes requested for 127.0.0.1:' + port + '.');
+    try {
+      const results = await Promise.all([probeHttp(port), probeWebSocket(port)]);
+      $('networkResult').textContent = results.join('. ') + '. Failures are not proof of interception.';
+      badge('networkBadge', 'COMPLETE', 'good'); logToTerminal('Loopback probes finished: ' + results.join('; ') + '.');
+    } catch (e) { badge('networkBadge', 'UNAVAILABLE', 'warn'); $('networkResult').textContent = 'Probe could not run: ' + (e && e.message ? e.message : 'unknown error'); logToTerminal('Loopback probe could not run.'); }
+    finally { $('networkStart').disabled = false; }
+  });
+  window.addEventListener('pagehide', () => { cryptoGeneration++; cancelCryptoJobs(); for (const c of networkControllers) c.abort(); for (const s of networkSockets) { try { s.close(); } catch (_) {} } });
+  refreshHardware();
+  $('context').textContent = 'Protocol: ' + location.protocol + ' / cross-origin isolated: ' + (window.crossOriginIsolated ? 'yes' : 'no');
+  logToTerminal('Page initialized. Only explicitly requested 127.0.0.1 probes are permitted by page policy; physical isolation is not verified.');
+  logToTerminal('Ready. Select Run diagnostics to measure CPU and frame timing. Select Start screen-share check to request permission.');
+})();
+</script>
+</body>
+</html>
